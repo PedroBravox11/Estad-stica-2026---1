@@ -1,0 +1,729 @@
+---
+title: "Factores asociados a coccidiosis aviar en pollos"
+author: "LLAMOCCA COTAQUISPE LEVI MARCELINO"
+format: html
+editor: visual
+---
+
+## INSTALAR Y CARGAR PAQUETES
+
+instalar_si_falta <- function(paquete){
+  if(!require(paquete, character.only = TRUE)){
+    install.packages(paquete, dependencies = TRUE)
+    library(paquete, character.only = TRUE)
+  }
+}
+
+paquetes <- c(
+  "readxl",     # Para leer Excel
+  "dplyr",      # Para manipular datos
+  "ggplot2",    # Para gráficos
+  "janitor",    # Para tablas de frecuencia limpias
+  "broom",      # Para ordenar resultados de modelos
+  "writexl",    # Para exportar tablas a Excel
+  "forcats",    # Para ordenar categorías
+  "epitools",   # Para Odds Ratio crudos
+  "gtsummary"   # Para tablas bonitas de regresión
+)
+
+
+invisible(lapply(paquetes, instalar_si_falta))
+
+##CARGA DE LA BASE DE DATOS
+archivo <- "data/base_coccidiosis_aviar_teorica.xlsx"
+
+datos <- readxl::read_excel(
+  archivo,
+  sheet = "base_coccidiosis"
+)
+
+names(datos)
+str(datos)
+head(datos)
+
+
+##2. PREPARACIÓN DE VARIABLES
+
+
+datos <- datos %>%
+  mutate(
+    grupo_edad = factor(grupo_edad, levels = c("Adult", "Young", "Grower")),
+    sexo = factor(sexo),
+    tipo_raza = factor(tipo_raza, levels = c("Local", "Exotica")),
+    linea_productiva = factor(linea_productiva),
+    sitio_muestreo = factor(sitio_muestreo),
+    sistema_manejo = factor(sistema_manejo, levels = c("Extensivo", "Semi-intensivo", "Intensivo")),
+    sistema_cama = factor(sistema_cama),
+    higiene_galpon = factor(higiene_galpon, levels = c("Buena", "Regular", "Mala")),
+    densidad = factor(densidad, levels = c("Baja", "Media", "Alta")),
+    humedad_cama = factor(humedad_cama, levels = c("Seca", "Moderada", "Humeda")),
+    vacunado_coccidiosis = factor(vacunado_coccidiosis, levels = c("Si", "No")),
+    uso_anticoccidial = factor(uso_anticoccidial, levels = c("Si", "No")),
+    intensidad_infeccion = factor(intensidad_infeccion, levels = c("Negativo", "Leve", "Moderada", "Alta")),
+    coccidiosis = factor(coccidiosis, levels = c("No", "Si")),
+    coccidiosis_binaria = ifelse(coccidiosis == "Si", 1, 0)
+  )
+  
+  
+### Creamos una carpeta para guardar todos los resultados.
+
+
+if(!dir.exists("resultados_coccidiosis")){
+  dir.create("resultados_coccidiosis")
+}
+
+
+if(!dir.exists("resultados_coccidiosis/graficos")){
+  dir.create("resultados_coccidiosis/graficos")
+}
+
+
+if(!dir.exists("resultados_coccidiosis/tablas")){
+  dir.create("resultados_coccidiosis/tablas")
+}
+
+
+## OBJETIVO GENERAL
+# Determinar la prevalencia y los factores asociados a la
+# coccidiosis aviar en pollos.
+
+
+
+# OE1. DESCRIBIR LAS CARACTERÍSTICAS DE LAS AVES EVALUADAS
+
+
+# Variables numéricas: edad y OPG.
+
+
+
+resumen_numerico <- datos %>%
+  summarise(
+    n = n(),
+    edad_media = mean(edad_semanas, na.rm = TRUE),
+    edad_sd = sd(edad_semanas, na.rm = TRUE),
+    edad_min = min(edad_semanas, na.rm = TRUE),
+    edad_max = max(edad_semanas, na.rm = TRUE),
+    opg_media = mean(opg, na.rm = TRUE),
+    opg_sd = sd(opg, na.rm = TRUE),
+    opg_mediana = median(opg, na.rm = TRUE)
+  )
+
+
+
+resumen_numerico
+
+
+# Tablas de frecuencia para variables categóricas.
+
+
+
+tabla_grupo_edad <- datos %>% tabyl(grupo_edad) %>% adorn_pct_formatting()
+
+tabla_sexo <- datos %>% tabyl(sexo) %>% adorn_pct_formatting()
+
+tabla_tipo_raza <- datos %>% tabyl(tipo_raza) %>% adorn_pct_formatting()
+
+
+tabla_sistema_manejo <- datos %>% tabyl(sistema_manejo) %>% adorn_pct_formatting()
+
+tabla_sistema_cama <- datos %>% tabyl(sistema_cama) %>% adorn_pct_formatting()
+tabla_higiene <- datos %>% tabyl(higiene_galpon) %>% adorn_pct_formatting()
+
+
+
+# Visualizar tablas en consola.
+
+tabla_grupo_edad
+tabla_sexo
+tabla_tipo_raza
+tabla_sistema_manejo
+tabla_sistema_cama
+tabla_higiene
+
+# Exportamos estas tablas a Excel.
+
+writexl::write_xlsx(
+  list(
+    resumen_numerico = resumen_numerico,
+    grupo_edad = tabla_grupo_edad,
+    sexo = tabla_sexo,
+    tipo_raza = tabla_tipo_raza,
+    sistema_manejo = tabla_sistema_manejo,
+    sistema_cama = tabla_sistema_cama,
+    higiene = tabla_higiene
+  ),
+  path = "resultados_coccidiosis/tablas/OE1_descriptivos.xlsx"
+)
+
+
+# GRÁFICO 1: Histograma de edad.
+
+g1 <- ggplot(datos, aes(x = edad_semanas)) +
+  geom_histogram(bins = 20) +
+  labs(
+    title = "Distribución de edad de las aves",
+    x = "Edad en semanas",
+    y = "Número de aves"
+  ) +
+  theme_minimal()
+
+
+ggsave("resultados_coccidiosis/graficos/01_histograma_edad.png", g1, width = 8, height = 5)
+
+
+
+# GRÁFICO 2: Distribución por grupo de edad.
+
+
+g2 <- ggplot(datos, aes(x = grupo_edad)) +
+  geom_bar() +
+  labs(
+    title = "Distribución de aves según grupo de edad",
+    x = "Grupo de edad",
+    y = "Número de aves"
+  ) +
+  theme_minimal()
+
+
+ggsave("resultados_coccidiosis/graficos/02_barras_grupo_edad.png", g2, width = 8, height = 5)
+
+
+# GRÁFICO 3: Distribución por sistema de manejo.
+
+
+
+g3 <- ggplot(datos, aes(x = sistema_manejo)) +
+  geom_bar() +
+  labs(
+    title = "Distribución de aves según sistema de manejo",
+    x = "Sistema de manejo",
+    y = "Número de aves"
+  ) +
+  theme_minimal()
+  
+  
+  
+ggsave("resultados_coccidiosis/graficos/03_barras_sistema_manejo.png", g3, width = 8, height = 5)  
+  
+
+
+# OE2. DETERMINAR LA PREVALENCIA DE COCCIDIOSIS AVIAR
+
+
+# La prevalencia es el número de aves positivas dividido entre el total de aves evaluadas.
+
+
+prevalencia <- datos %>%
+  summarise(
+    total_aves = n(),
+    positivos = sum(coccidiosis == "Si"),
+    negativos = sum(coccidiosis == "No"),
+    prevalencia = positivos / total_aves,
+    prevalencia_porcentaje = prevalencia * 100
+  )
+
+
+
+prevalencia
+
+write.csv(prevalencia, "resultados_coccidiosis/tablas/OE2_prevalencia.csv", row.names = FALSE)
+
+
+# GRÁFICO 4: Frecuencia de coccidiosis.
+
+
+g4 <- ggplot(datos, aes(x = coccidiosis)) +
+  geom_bar() +
+  labs(
+    title = "Frecuencia de coccidiosis aviar",
+    x = "Coccidiosis",
+    y = "Número de aves"
+  ) +
+  theme_minimal()
+
+
+ggsave("resultados_coccidiosis/graficos/04_barras_coccidiosis.png", g4, width = 7, height = 5)
+
+
+
+# GRÁFICO 5: OPG según estado de coccidiosis.
+
+# Este gráfico permite ver si las aves positivas tienen mayor recuento de ooquistes.
+
+
+g5 <- ggplot(datos, aes(x = coccidiosis, y = opg)) +
+  geom_boxplot() +
+  labs(
+    title = "Recuento de ooquistes por gramo según coccidiosis",
+    x = "Coccidiosis",
+    y = "OPG"
+  ) +
+  theme_minimal()
+
+ggsave("resultados_coccidiosis/graficos/05_boxplot_opg_coccidiosis.png", g5, width = 7, height = 5)
+
+
+
+
+# FUNCIÓN AUXILIAR PARA ANÁLISIS BIVARIADO
+
+
+analisis_bivariado <- function(variable, nombre_variable){
+
+
+tabla <- table(datos[[variable]], datos$coccidiosis)
+  print(tabla)
+
+
+# Porcentajes por fila: de cada categoría, qué porcentaje fue positivo o negativo.
+ 
+porcentajes <- prop.table(tabla, margin = 1) * 100
+print(round(porcentajes, 2))
+
+
+# Chi-cuadrado preliminar
+
+
+prueba_chi <- suppressWarnings(chisq.test(tabla))
+
+
+
+# Si alguna frecuencia esperada es menor a 5, usamos Fisher.
+
+
+  if(any(prueba_chi$expected < 5)){
+    prueba <- fisher.test(tabla)
+    metodo <- "Fisher exact test"
+    p_valor <- prueba$p.value
+  } else {
+    prueba <- prueba_chi
+    metodo <- "Chi-square test"
+    p_valor <- prueba$p.value
+  }
+  
+  resultado <- data.frame(
+    variable = nombre_variable,
+    metodo = metodo,
+    p_valor = p_valor
+  )
+  
+  write.csv(as.data.frame.matrix(tabla),
+            paste0("resultados_coccidiosis/tablas/tabla_", variable, ".csv"))
+  
+  write.csv(resultado,
+            paste0("resultados_coccidiosis/tablas/prueba_", variable, ".csv"),
+            row.names = FALSE)
+  
+  return(resultado)
+}
+
+
+
+# OE3. ASOCIACIÓN ENTRE GRUPO DE EDAD Y COCCIDIOSIS
+
+
+
+res_edad <- analisis_bivariado("grupo_edad", "Grupo de edad")
+
+
+res_edad
+
+
+# GRÁFICO 6: Proporción de coccidiosis por grupo de edad.
+
+g6 <- ggplot(datos, aes(x = grupo_edad, fill = coccidiosis)) +
+  geom_bar(position = "fill") +
+  labs(
+    title = "Proporción de coccidiosis según grupo de edad",
+    x = "Grupo de edad",
+    y = "Proporción",
+    fill = "Coccidiosis"
+  ) +
+  theme_minimal()
+
+
+ggsave("resultados_coccidiosis/graficos/06_proporcion_coccidiosis_grupo_edad.png", g6, width = 8, height = 5)
+
+
+
+# OE4. ASOCIACIÓN ENTRE TIPO DE RAZA / LÍNEA PRODUCTIVA Y COCCIDIOSIS
+
+
+res_raza <- analisis_bivariado("tipo_raza", "Tipo de raza")
+res_linea <- analisis_bivariado("linea_productiva", "Línea productiva")
+res_raza
+res_linea
+
+
+# GRÁFICO 7: Coccidiosis por tipo de raza.
+
+
+g7 <- ggplot(datos, aes(x = tipo_raza, fill = coccidiosis)) +
+  geom_bar(position = "fill") +
+  labs(
+    title = "Proporción de coccidiosis según tipo de raza",
+    x = "Tipo de raza",
+    y = "Proporción",
+    fill = "Coccidiosis"
+  ) +
+  theme_minimal()
+
+
+
+ggsave("resultados_coccidiosis/graficos/07_proporcion_coccidiosis_tipo_raza.png", g7, width = 8, height = 5)
+
+
+
+# GRÁFICO 8: Coccidiosis por línea productiva.
+
+
+g8 <- ggplot(datos %>% filter(linea_productiva != "No aplica"),
+             aes(x = linea_productiva, fill = coccidiosis)) +
+  geom_bar(position = "fill") +
+  labs(
+    title = "Proporción de coccidiosis según línea productiva",
+    x = "Línea productiva",
+    y = "Proporción",
+    fill = "Coccidiosis"
+  ) +
+  theme_minimal()
+
+
+
+ggsave("resultados_coccidiosis/graficos/08_proporcion_coccidiosis_linea_productiva.png", g8, width = 8, height = 5)
+
+
+
+
+# OE5. ASOCIACIÓN ENTRE MANEJO, CAMA, HIGIENE Y COCCIDIOSIS
+
+
+res_manejo <- analisis_bivariado("sistema_manejo", "Sistema de manejo")
+
+
+res_cama <- analisis_bivariado("sistema_cama", "Sistema de cama")
+
+res_higiene <- analisis_bivariado("higiene_galpon", "Higiene del galpón")
+
+res_densidad <- analisis_bivariado("densidad", "Densidad")
+
+res_humedad <- analisis_bivariado("humedad_cama", "Humedad de cama")
+res_vacunacion <- analisis_bivariado("vacunado_coccidiosis", "Vacunación")
+
+res_anticoccidial <- analisis_bivariado("uso_anticoccidial", "Uso de anticoccidial")
+
+
+
+# GRÁFICO 9: Coccidiosis por sistema de manejo.
+
+g9 <- ggplot(datos, aes(x = sistema_manejo, fill = coccidiosis)) +
+  geom_bar(position = "fill") +
+  labs(
+    title = "Proporción de coccidiosis según sistema de manejo",
+    x = "Sistema de manejo",
+    y = "Proporción",
+    fill = "Coccidiosis"
+  ) +
+  theme_minimal()
+
+ggsave("resultados_coccidiosis/graficos/09_proporcion_coccidiosis_sistema_manejo.png", g9, width = 8, height = 5)
+
+
+# GRÁFICO 10: Coccidiosis por higiene del galpón.
+
+g10 <- ggplot(datos, aes(x = higiene_galpon, fill = coccidiosis)) +
+  geom_bar(position = "fill") +
+  labs(
+    title = "Proporción de coccidiosis según higiene del galpón",
+    x = "Higiene del galpón",
+    y = "Proporción",
+    fill = "Coccidiosis"
+  ) +
+  theme_minimal()
+
+
+ggsave("resultados_coccidiosis/graficos/10_proporcion_coccidiosis_higiene.png", g10, width = 8, height = 5)
+
+
+# GRÁFICO 11: Coccidiosis por humedad de cama.
+
+g11 <- ggplot(datos, aes(x = humedad_cama, fill = coccidiosis)) +
+  geom_bar(position = "fill") +
+  labs(
+    title = "Proporción de coccidiosis según humedad de cama",
+    x = "Humedad de cama",
+    y = "Proporción",
+    fill = "Coccidiosis"
+  ) +
+  theme_minimal()
+
+
+ggsave("resultados_coccidiosis/graficos/11_proporcion_coccidiosis_humedad_cama.png", g11, width = 8, height = 5)
+
+
+# ODDS RATIO CRUDOS
+
+
+
+datos <- datos %>%
+  mutate(
+    grower_vs_otros = ifelse(grupo_edad == "Grower", "Grower", "Otros"),
+    exotica_vs_local = ifelse(tipo_raza == "Exotica", "Exotica", "Local"),
+    intensivo_vs_otros = ifelse(sistema_manejo == "Intensivo", "Intensivo", "Otros"),
+    higiene_mala_vs_otros = ifelse(higiene_galpon == "Mala", "Mala", "Buena/Regular"),
+    humedad_humeda_vs_otros = ifelse(humedad_cama == "Humeda", "Humeda", "Seca/Moderada"),
+    vacunado_no_vs_si = ifelse(vacunado_coccidiosis == "No", "No vacunado", "Vacunado")
+  )
+
+
+calcular_or <- function(variable, nombre_variable){
+  tabla <- table(datos[[variable]], datos$coccidiosis)
+  print(tabla)
+
+
+
+
+# Si la tabla es 2x2, calculamos OR.
+ 
+ 
+
+  if(all(dim(tabla) == c(2,2))){
+    or <- epitools::oddsratio(tabla, method = "wald")
+    print(or)
+    
+    resultado <- as.data.frame(or$measure)
+    resultado$categoria <- rownames(resultado)
+    resultado$variable <- nombre_variable
+    rownames(resultado) <- NULL
+    
+ 
+    write.csv(resultado,
+              paste0("resultados_coccidiosis/tablas/OR_", variable, ".csv"),
+              row.names = FALSE)
+    return(resultado)
+  } else {
+    message("La variable no es binaria; no se calcula OR 2x2 en esta función.")
+    return(NULL)
+  }
+}
+
+
+
+or_grower <- calcular_or("grower_vs_otros", "Grower vs otros")
+or_raza <- calcular_or("exotica_vs_local", "Exótica vs local")
+or_manejo <- calcular_or("intensivo_vs_otros", "Intensivo vs otros")
+or_higiene <- calcular_or("higiene_mala_vs_otros", "Higiene mala vs buena/regular")
+or_humedad <- calcular_or("humedad_humeda_vs_otros", "Cama húmeda vs seca/moderada")
+or_vacunacion <- calcular_or("vacunado_no_vs_si", "No vacunado vs vacunado")
+
+
+# OE6. REGRESIÓN LOGÍSTICA MULTIVARIADA
+
+modelo <- glm(
+  coccidiosis ~ grupo_edad + sexo + tipo_raza + sistema_manejo +
+    sistema_cama + higiene_galpon + densidad + humedad_cama +
+    vacunado_coccidiosis + uso_anticoccidial,
+  data = datos,
+  family = binomial
+)
+
+
+summary(modelo)
+
+
+# Tabla de OR ajustados con intervalos de confianza.
+
+
+or_ajustados <- broom::tidy(modelo, exponentiate = TRUE, conf.int = TRUE) %>%
+  rename(
+    OR_ajustado = estimate,
+    IC95_inf = conf.low,
+    IC95_sup = conf.high,
+    p_valor = p.value
+  )
+
+
+
+or_ajustados
+
+
+write.csv(or_ajustados,
+          "resultados_coccidiosis/tablas/OE6_OR_ajustados_regresion_logistica.csv",
+          row.names = FALSE)
+
+
+# Tabla más elegante para el informe.
+
+
+tabla_modelo <- gtsummary::tbl_regression(
+  modelo,
+  exponentiate = TRUE
+)
+
+
+tabla_modelo
+
+
+# Guardamos la tabla gtsummary como RDS por si se quiere recuperar luego.
+
+
+saveRDS(tabla_modelo, "resultados_coccidiosis/tablas/tabla_modelo_gtsummary.rds")
+
+
+
+# GRÁFICO 12. FOREST PLOT DE OR AJUSTADOS
+
+# Quitamos el intercepto porque no se interpreta como factor de riesgo.
+
+
+
+
+levels(or_ajustados$term)
+class(or_ajustados$term)
+duplicated(or_ajustados$term)
+
+
+or_plot <- or_ajustados %>%
+  filter(term != "(Intercept)") %>%
+  mutate(
+    significativo = ifelse(p_valor < 0.05, "p < 0.05", "p >= 0.05"),
+    term = forcats::fct_reorder(term, OR_ajustado)
+  )
+  
+  
+  
+g12 <- ggplot(or_plot, aes(x = OR_ajustado, y = term)) +
+  geom_point() +
+  geom_errorbarh(aes(xmin = IC95_inf, xmax = IC95_sup), height = 0.2) +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  scale_x_log10() +
+  labs(
+    title = "Factores asociados a coccidiosis aviar",
+    subtitle = "Odds Ratio ajustados - Regresión logística",
+    x = "Odds Ratio ajustado (escala logarítmica)",
+    y = "Variable"
+  ) +
+  theme_minimal()
+  
+  
+  
+  
+  
+  
+ggsave("resultados_coccidiosis/graficos/12_forest_plot_OR_ajustados.png", g12, width = 9, height = 7)
+
+
+
+
+# PROBABILIDADES PREDICHAS
+
+
+# Añadimos al dataset la probabilidad predicha por el modelo.
+# Esto permite ver qué aves tienen mayor probabilidad estimada de coccidiosis.
+
+
+
+datos$probabilidad_predicha <- predict(modelo, type = "response")
+
+
+# GRÁFICO 13: Probabilidad predicha según grupo de edad.
+
+
+
+g13 <- ggplot(datos, aes(x = grupo_edad, y = probabilidad_predicha)) +
+  geom_boxplot() +
+  labs(
+    title = "Probabilidad predicha de coccidiosis según grupo de edad",
+    x = "Grupo de edad",
+    y = "Probabilidad predicha"
+  ) +
+  theme_minimal()
+
+
+ggsave("resultados_coccidiosis/graficos/13_probabilidad_predicha_grupo_edad.png", g13, width = 8, height = 5)
+
+
+# GRÁFICO 14: Probabilidad predicha según higiene del galpón.
+
+
+
+g14 <- ggplot(datos, aes(x = higiene_galpon, y = probabilidad_predicha)) +
+  geom_boxplot() +
+  labs(
+    title = "Probabilidad predicha de coccidiosis según higiene del galpón",
+    x = "Higiene del galpón",
+    y = "Probabilidad predicha"
+  ) +
+  theme_minimal()
+
+
+
+ggsave("resultados_coccidiosis/graficos/14_probabilidad_predicha_higiene.png", g14, width = 8, height = 5)
+
+
+
+# RESPUESTAS AUTOMÁTICAS A LOS OBJETIVOS
+
+
+
+# Este bloque genera un archivo de texto con una interpretación inicial.
+# El estudiante debe leerlo, revisar los valores y redactar su informe final
+# con sus propias palabras.
+
+
+
+
+p_edad <- res_edad$p_valor
+
+p_raza <- res_raza$p_valor
+
+
+p_higiene <- res_higiene$p_valor
+p_humedad <- res_humedad$p_valor
+
+
+
+texto_objetivos <- c(
+  "RESPUESTAS A LOS OBJETIVOS - COCCIDIOSIS AVIAR",
+  "--------------------------------------------------",
+  paste0("OE1. Se evaluaron ", nrow(datos), " aves. La edad promedio fue ", round(resumen_numerico$edad_media, 2), " semanas."),
+  paste0("OE2. La prevalencia de coccidiosis fue ", round(prevalencia$prevalencia_porcentaje, 2), "% (", prevalencia$positivos, "/", prevalencia$total_aves, ")."),
+  paste0("OE3. Asociación grupo de edad-coccidiosis: p = ", signif(p_edad, 4), ". Si p < 0.05, se considera asociación estadísticamente significativa."),
+  paste0("OE4. Asociación tipo de raza-coccidiosis: p = ", signif(p_raza, 4), "."),
+  paste0("OE5. Asociación sistema de manejo-coccidiosis: p = ", signif(p_manejo, 4), "; higiene del galpón: p = ", signif(p_higiene, 4), "; humedad de cama: p = ", signif(p_humedad, 4), "."),
+  "OE6. En la regresión logística, revisar la tabla de OR ajustados. Las variables con p < 0.05 se interpretan como factores asociados, considerando el ajuste por las demás variables.",
+  "",
+  "Guía de interpretación:",
+  "- OR > 1: mayor odds/probabilidad relativa de coccidiosis frente a la categoría de referencia.",
+  "- OR < 1: menor odds/probabilidad relativa; podría interpretarse como factor protector.",
+  "- Si el intervalo de confianza del 95% incluye el 1, la asociación no suele considerarse estadísticamente significativa.",
+  "- Comparar los resultados con el artículo de referencia, donde la coccidiosis se asoció con edad, raza, sistema de manejo y sistema de cama."
+)
+
+
+
+writeLines(texto_objetivos, "resultados_coccidiosis/respuestas_objetivos.txt")
+
+
+
+
+# EXPORTAR BASE FINAL CON PROBABILIDAD PREDICHA
+
+
+writexl::write_xlsx(
+  list(
+    base_con_probabilidad = datos,
+    OR_ajustados = or_ajustados,
+    prevalencia = prevalencia
+  ),
+  path = "resultados_coccidiosis/base_y_resultados_modelo.xlsx"
+)
+
+
+## FIN DEL SCRIPT
+
+
+
+
+
+
